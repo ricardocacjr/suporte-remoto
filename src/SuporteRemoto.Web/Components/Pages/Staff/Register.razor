@@ -1,12 +1,12 @@
-@page "/register"
+@page "/staff/register"
 @using SuporteRemoto.Web.Services
 @inject SuporteRemotoApiClient Api
 @inject AuthState AuthState
 @inject NavigationManager Nav
 
-<PageTitle>Cadastrar</PageTitle>
+<PageTitle>Cadastro da equipe</PageTitle>
 
-<h1>Criar conta</h1>
+<h1>Criar conta da equipe</h1>
 
 <EditForm Model="_model" OnValidSubmit="HandleRegisterAsync">
     <div class="mb-3">
@@ -24,7 +24,6 @@
     <div class="mb-3">
         <label class="form-label">Papel</label>
         <InputSelect class="form-select" @bind-Value="_model.Role">
-            <option value="UsuarioFinal">Usuário final (abre tickets)</option>
             <option value="Tecnico">Técnico (atende tickets)</option>
             <option value="Admin">Admin</option>
         </InputSelect>
@@ -39,7 +38,7 @@
 </EditForm>
 
 <p class="mt-3">
-    Já tem conta? <a href="/login">Entrar</a>
+    Já tem conta? <a href="/staff/login">Entrar</a>
 </p>
 
 @code {
@@ -78,6 +77,6 @@
         public string NomeCompleto { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
         public string Password { get; set; } = string.Empty;
-        public string Role { get; set; } = "UsuarioFinal";
+        public string Role { get; set; } = "Tecnico";
     }
 }

@@ -24,6 +24,14 @@ public class SuporteRemotoApiClient(HttpClient http, AuthState authState)
         return await response.Content.ReadFromJsonAsync<AuthResponse>();
     }
 
+    /// <summary>Entrada sem senha pra usuário final — cria a conta automaticamente se for a primeira vez.</summary>
+    public async Task<AuthResponse?> EnterAsync(string nomeCompleto, string email)
+    {
+        var response = await http.PostAsJsonAsync("api/auth/enter", new EnterRequest(nomeCompleto, email));
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<AuthResponse>();
+    }
+
     public async Task<IReadOnlyList<TicketDto>> GetTicketsAsync()
     {
         using var request = AuthorizedRequest(HttpMethod.Get, "api/tickets");

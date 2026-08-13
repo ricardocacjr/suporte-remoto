@@ -1,23 +1,21 @@
-@page "/login"
+@page "/staff/login"
 @using SuporteRemoto.Web.Services
 @inject SuporteRemotoApiClient Api
 @inject AuthState AuthState
 @inject NavigationManager Nav
 
-<PageTitle>Entrar</PageTitle>
+<PageTitle>Acesso da equipe</PageTitle>
 
-<h1>Abrir chamado</h1>
+<h1>Acesso da equipe</h1>
 
-<p>Informe seu nome e e-mail pra abrir ou acompanhar seus chamados. Não precisa de senha.</p>
-
-<EditForm Model="_model" OnValidSubmit="HandleEnterAsync">
-    <div class="mb-3">
-        <label class="form-label">Nome completo</label>
-        <InputText class="form-control" @bind-Value="_model.NomeCompleto" />
-    </div>
+<EditForm Model="_model" OnValidSubmit="HandleLoginAsync">
     <div class="mb-3">
         <label class="form-label">E-mail</label>
         <InputText class="form-control" @bind-Value="_model.Email" />
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Senha</label>
+        <InputText class="form-control" type="password" @bind-Value="_model.Password" />
     </div>
 
     @if (_error is not null)
@@ -28,21 +26,25 @@
     <button type="submit" class="btn btn-primary" disabled="@_loading">Entrar</button>
 </EditForm>
 
+<p class="mt-3">
+    Primeira vez? <a href="/staff/register">Criar conta da equipe</a>
+</p>
+
 @code {
-    private readonly EnterModel _model = new();
+    private readonly LoginModel _model = new();
     private string? _error;
     private bool _loading;
 
-    private async Task HandleEnterAsync()
+    private async Task HandleLoginAsync()
     {
         _loading = true;
         _error = null;
         try
         {
-            var result = await Api.EnterAsync(_model.NomeCompleto, _model.Email);
+            var result = await Api.LoginAsync(_model.Email, _model.Password);
             if (result is null)
             {
-                _error = "Não foi possível entrar.";
+                _error = "Não foi possível autenticar.";
                 return;
             }
 
@@ -51,7 +53,7 @@
         }
         catch (HttpRequestException)
         {
-            _error = "Não foi possível entrar. Se esse e-mail já é usado pela equipe, procure o acesso interno.";
+            _error = "E-mail ou senha inválidos.";
         }
         finally
         {
@@ -59,9 +61,9 @@
         }
     }
 
-    private class EnterModel
+    private class LoginModel
     {
-        public string NomeCompleto { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
     }
 }
