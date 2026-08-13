@@ -22,6 +22,9 @@ WORKDIR /app
 COPY --from=build /app/publish .
 
 ENV ASPNETCORE_HTTP_PORTS=8080
+# Containers com limite baixo de inotify (comum em planos free de PaaS) derrubam o app na
+# inicialização porque o .NET tenta observar appsettings.json pra hot-reload. Desativa isso.
+ENV DOTNET_hostBuilder__reloadConfigOnChange=false
 EXPOSE 8080
 
 ENTRYPOINT ["dotnet", "SuporteRemoto.Api.dll"]
