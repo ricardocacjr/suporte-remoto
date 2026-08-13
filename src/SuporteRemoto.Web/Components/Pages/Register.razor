@@ -1,0 +1,83 @@
+@page "/register"
+@using SuporteRemoto.Web.Services
+@inject SuporteRemotoApiClient Api
+@inject AuthState AuthState
+@inject NavigationManager Nav
+
+<PageTitle>Cadastrar</PageTitle>
+
+<h1>Criar conta</h1>
+
+<EditForm Model="_model" OnValidSubmit="HandleRegisterAsync">
+    <div class="mb-3">
+        <label class="form-label">Nome completo</label>
+        <InputText class="form-control" @bind-Value="_model.NomeCompleto" />
+    </div>
+    <div class="mb-3">
+        <label class="form-label">E-mail</label>
+        <InputText class="form-control" @bind-Value="_model.Email" />
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Senha</label>
+        <InputText class="form-control" type="password" @bind-Value="_model.Password" />
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Papel</label>
+        <InputSelect class="form-select" @bind-Value="_model.Role">
+            <option value="UsuarioFinal">Usuário final (abre tickets)</option>
+            <option value="Tecnico">Técnico (atende tickets)</option>
+            <option value="Admin">Admin</option>
+        </InputSelect>
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="alert alert-danger">@_error</div>
+    }
+
+    <button type="submit" class="btn btn-primary" disabled="@_loading">Criar conta</button>
+</EditForm>
+
+<p class="mt-3">
+    Já tem conta? <a href="/login">Entrar</a>
+</p>
+
+@code {
+    private readonly RegisterModel _model = new();
+    private string? _error;
+    private bool _loading;
+
+    private async Task HandleRegisterAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            var result = await Api.RegisterAsync(_model.NomeCompleto, _model.Email, _model.Password, _model.Role);
+            if (result is null)
+            {
+                _error = "Não foi possível criar a conta.";
+                return;
+            }
+
+            AuthState.SignIn(result.Token, _model.Email);
+            Nav.NavigateTo("/tickets");
+        }
+        catch (HttpRequestException)
+        {
+            _error = "Não foi possível criar a conta. Verifique os dados (senha precisa de pelo menos 8 caracteres) ou se o e-mail já está cadastrado.";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private class RegisterModel
+    {
+        public string NomeCompleto { get; set; } = string.Empty;
+        public string Email { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+        public string Role { get; set; } = "UsuarioFinal";
+    }
+}
