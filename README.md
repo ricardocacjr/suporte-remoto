@@ -35,6 +35,27 @@ Api, Agent e Viewer se conectam a dois hubs SignalR:
 Entidades principais (`Ticket`, `ChatThread`, `RemoteSession`) já têm `TenantId` (nullable) para
 não travar uma futura oferta multi-tenant, sem implementar isso agora.
 
+## Ambiente de produção (Render + Aiven)
+
+A Api e a Web estão publicadas e acessíveis pela internet:
+- Api: https://suporte-remoto.onrender.com
+- Web: https://suporte-remoto-web.onrender.com
+
+Deploy via [Render](https://render.com) (Web Services em Docker, build a partir de
+[`src/SuporteRemoto.Api/Dockerfile`](src/SuporteRemoto.Api/Dockerfile) e
+[`src/SuporteRemoto.Web/Dockerfile`](src/SuporteRemoto.Web/Dockerfile)) + banco
+[Aiven](https://aiven.io) MySQL gerenciado. Segredos (connection string, `Jwt:Key`) ficam só nas
+variáveis de ambiente do Render, nunca em arquivo versionado. Testado ponta a ponta: registro,
+login, criar ticket, e chat em tempo real — tudo confirmado direto nas URLs públicas.
+
+Planos free do Render dormem depois de um tempo sem uso — a primeira requisição depois disso pode
+demorar ~30s pra "acordar" o serviço.
+
+**Pegadinha resolvida**: containers com limite baixo de `inotify` (comum em planos free de PaaS)
+derrubavam o app na inicialização, porque o .NET tenta observar `appsettings.json` pra hot-reload
+por padrão. Corrigido desativando isso via `DOTNET_hostBuilder__reloadConfigOnChange=false` nos
+Dockerfiles — vale a pena saber se for reproduzir esse deploy em outro provedor parecido.
+
 ## Pré-requisitos
 
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
@@ -121,3 +142,6 @@ persistida e recebida por ambos) → acesso a ticket de outro usuário final ret
    de maior risco técnico, merece sessão de planejamento própria.
 2. Autenticação persistente na Web (cookie) e Identity mais completo (recuperação de senha etc.).
 3. Trocar o token de download de anexo por algo de vida curta (não o JWT de sessão inteiro na URL).
+4. Anexos de ticket ficam em disco local dentro do container — no Render isso é efêmero (some a
+   cada redeploy/restart). Trocar por armazenamento externo (S3-compatível) quando o módulo de
+   tickets for revisitado.
