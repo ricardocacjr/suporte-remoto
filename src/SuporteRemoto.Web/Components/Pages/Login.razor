@@ -1,0 +1,65 @@
+@page "/login"
+@using SuporteRemoto.Web.Services
+@inject SuporteRemotoApiClient Api
+@inject AuthState AuthState
+@inject NavigationManager Nav
+
+<PageTitle>Entrar</PageTitle>
+
+<h1>Entrar</h1>
+
+<EditForm Model="_model" OnValidSubmit="HandleLoginAsync">
+    <div class="mb-3">
+        <label class="form-label">E-mail</label>
+        <InputText class="form-control" @bind-Value="_model.Email" />
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Senha</label>
+        <InputText class="form-control" type="password" @bind-Value="_model.Password" />
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="alert alert-danger">@_error</div>
+    }
+
+    <button type="submit" class="btn btn-primary" disabled="@_loading">Entrar</button>
+</EditForm>
+
+@code {
+    private readonly LoginModel _model = new();
+    private string? _error;
+    private bool _loading;
+
+    private async Task HandleLoginAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            var result = await Api.LoginAsync(_model.Email, _model.Password);
+            if (result is null)
+            {
+                _error = "Não foi possível autenticar.";
+                return;
+            }
+
+            AuthState.SignIn(result.Token, _model.Email);
+            Nav.NavigateTo("/tickets");
+        }
+        catch (HttpRequestException)
+        {
+            _error = "E-mail ou senha inválidos.";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private class LoginModel
+    {
+        public string Email { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+    }
+}

@@ -1,0 +1,148 @@
+@page "/tickets"
+@using SuporteRemoto.Domain.Enums
+@using SuporteRemoto.Shared.Tickets
+@using SuporteRemoto.Web.Services
+@inject SuporteRemotoApiClient Api
+@inject AuthState AuthState
+@inject NavigationManager Nav
+
+<PageTitle>Tickets</PageTitle>
+
+<h1>Tickets</h1>
+
+@if (!AuthState.IsAuthenticated)
+{
+    <p>
+        Você precisa <a href="/login">entrar</a> para ver os tickets.
+    </p>
+}
+else
+{
+    <EditForm Model="_newTicket" OnValidSubmit="HandleCreateAsync">
+        <div class="row g-2 mb-3">
+            <div class="col-md-3">
+                <InputText class="form-control" placeholder="Título" @bind-Value="_newTicket.Titulo" />
+            </div>
+            <div class="col-md-4">
+                <InputText class="form-control" placeholder="Descrição" @bind-Value="_newTicket.Descricao" />
+            </div>
+            <div class="col-md-2">
+                <InputSelect class="form-select" @bind-Value="_newTicket.Prioridade">
+                    @foreach (var prioridade in Enum.GetValues<TicketPriority>())
+                    {
+                        <option value="@prioridade">@prioridade</option>
+                    }
+                </InputSelect>
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-primary w-100" disabled="@_loading">Abrir ticket</button>
+            </div>
+        </div>
+    </EditForm>
+
+    @if (_error is not null)
+    {
+        <div class="alert alert-danger">@_error</div>
+    }
+
+    @if (_tickets is null)
+    {
+        <p>Carregando...</p>
+    }
+    else if (_tickets.Count == 0)
+    {
+        <p>Nenhum ticket ainda.</p>
+    }
+    else
+    {
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Título</th>
+                    <th>Status</th>
+                    <th>Prioridade</th>
+                    <th>Solicitante</th>
+                    <th>Técnico</th>
+                    <th>Criado em</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var ticket in _tickets)
+                {
+                    <tr style="cursor:pointer" @onclick="() => NavigateToTicket(ticket.Id)">
+                        <td>@ticket.Titulo</td>
+                        <td>@ticket.Status</td>
+                        <td>@ticket.Prioridade</td>
+                        <td>@ticket.SolicitanteNome</td>
+                        <td>@(ticket.TecnicoResponsavelNome ?? "Não atribuído")</td>
+                        <td>@ticket.CreatedAt.LocalDateTime</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    private List<TicketDto>? _tickets;
+    private string? _error;
+    private bool _loading;
+    private readonly NewTicketModel _newTicket = new();
+
+    private void NavigateToTicket(Guid id) => Nav.NavigateTo($"/tickets/{id}");
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!AuthState.IsAuthenticated)
+        {
+            Nav.NavigateTo("/login");
+            return;
+        }
+
+        await LoadTicketsAsync();
+    }
+
+    private async Task LoadTicketsAsync()
+    {
+        try
+        {
+            _tickets = (await Api.GetTicketsAsync()).ToList();
+        }
+        catch (HttpRequestException)
+        {
+            _error = "Não foi possível carregar os tickets.";
+        }
+    }
+
+    private async Task HandleCreateAsync()
+    {
+        if (AuthState.UserId is null)
+            return;
+
+        _loading = true;
+        _error = null;
+        try
+        {
+            var request = new CreateTicketRequest(_newTicket.Titulo, _newTicket.Descricao, _newTicket.Prioridade, AuthState.UserId.Value);
+            await Api.CreateTicketAsync(request);
+            _newTicket.Titulo = string.Empty;
+            _newTicket.Descricao = string.Empty;
+            await LoadTicketsAsync();
+        }
+        catch (HttpRequestException)
+        {
+            _error = "Não foi possível criar o ticket.";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private class NewTicketModel
+    {
+        public string Titulo { get; set; } = string.Empty;
+        public string Descricao { get; set; } = string.Empty;
+        public TicketPriority Prioridade { get; set; } = TicketPriority.Normal;
+    }
+}

@@ -1,0 +1,23 @@
+# Build context: raiz do repositório (não a pasta deste projeto).
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+
+COPY ["src/SuporteRemoto.Web/SuporteRemoto.Web.csproj", "src/SuporteRemoto.Web/"]
+COPY ["src/SuporteRemoto.Shared/SuporteRemoto.Shared.csproj", "src/SuporteRemoto.Shared/"]
+COPY ["src/SuporteRemoto.Domain/SuporteRemoto.Domain.csproj", "src/SuporteRemoto.Domain/"]
+RUN dotnet restore "src/SuporteRemoto.Web/SuporteRemoto.Web.csproj"
+
+COPY src/SuporteRemoto.Web/ src/SuporteRemoto.Web/
+COPY src/SuporteRemoto.Shared/ src/SuporteRemoto.Shared/
+COPY src/SuporteRemoto.Domain/ src/SuporteRemoto.Domain/
+
+RUN dotnet publish "src/SuporteRemoto.Web/SuporteRemoto.Web.csproj" -c Release -o /app/publish --no-restore
+
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
+WORKDIR /app
+COPY --from=build /app/publish .
+
+ENV ASPNETCORE_HTTP_PORTS=8080
+EXPOSE 8080
+
+ENTRYPOINT ["dotnet", "SuporteRemoto.Web.dll"]

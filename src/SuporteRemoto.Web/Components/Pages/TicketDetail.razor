@@ -1,0 +1,209 @@
+@page "/tickets/{Id:guid}"
+@implements IAsyncDisposable
+@using Microsoft.AspNetCore.SignalR.Client
+@using SuporteRemoto.Shared.Chat
+@using SuporteRemoto.Shared.Tickets
+@using SuporteRemoto.Web.Services
+@inject SuporteRemotoApiClient Api
+@inject AuthState AuthState
+@inject NavigationManager Nav
+
+<PageTitle>Ticket</PageTitle>
+
+@if (!AuthState.IsAuthenticated)
+{
+    <p>Você precisa <a href="/login">entrar</a>.</p>
+}
+else if (_notFound)
+{
+    <p>Ticket não encontrado.</p>
+}
+else if (_ticket is null)
+{
+    <p>Carregando...</p>
+}
+else
+{
+    <h1>@_ticket.Titulo</h1>
+    <p>@_ticket.Descricao</p>
+
+    <div class="mb-3">
+        <span class="badge bg-secondary">@_ticket.Status</span>
+        <span class="badge bg-info text-dark">@_ticket.Prioridade</span>
+    </div>
+
+    <p>
+        <strong>Solicitante:</strong> @_ticket.SolicitanteNome<br />
+        <strong>Técnico:</strong> @(_ticket.TecnicoResponsavelNome ?? "Não atribuído")
+    </p>
+
+    @if (_ticket.TecnicoResponsavelId is null && (AuthState.IsInRole("Tecnico") || AuthState.IsInRole("Admin")))
+    {
+        <button class="btn btn-primary mb-3" @onclick="HandleAssignAsync" disabled="@_assigning">Pegar ticket</button>
+    }
+
+    <h3>Comentários</h3>
+    <ul class="list-group mb-3">
+        @foreach (var comment in _ticket.Comentarios)
+        {
+            <li class="list-group-item">
+                <strong>@comment.AutorNome</strong> em @comment.CreatedAt.LocalDateTime<br />
+                @comment.Texto
+            </li>
+        }
+    </ul>
+    <EditForm Model="_newComment" OnValidSubmit="HandleAddCommentAsync">
+        <div class="input-group mb-3">
+            <InputText class="form-control" placeholder="Novo comentário" @bind-Value="_newComment.Texto" />
+            <button class="btn btn-outline-primary" type="submit">Comentar</button>
+        </div>
+    </EditForm>
+
+    <h3>Anexos</h3>
+    <ul class="list-group mb-3">
+        @foreach (var attachment in _ticket.Anexos)
+        {
+            <li class="list-group-item">
+                <a href="@Api.GetAttachmentDownloadUrl(Id, attachment.Id)" target="_blank">@attachment.NomeArquivo</a>
+                (@(attachment.TamanhoBytes / 1024) KB, enviado por @attachment.EnviadoPorNome)
+            </li>
+        }
+    </ul>
+    <InputFile OnChange="HandleUploadAsync" class="mb-3" />
+    @if (_uploadError is not null)
+    {
+        <div class="alert alert-danger">@_uploadError</div>
+    }
+
+    <h3>Chat</h3>
+    <div class="border p-2 mb-2" style="height:250px; overflow-y:auto;">
+        @foreach (var message in _messages)
+        {
+            <div><strong>@message.RemetenteNome</strong> (@message.CreatedAt.LocalDateTime.ToString("HH:mm")): @message.Texto</div>
+        }
+    </div>
+    <EditForm Model="_newMessage" OnValidSubmit="HandleSendMessageAsync">
+        <div class="input-group">
+            <InputText class="form-control" placeholder="Mensagem" @bind-Value="_newMessage.Texto" />
+            <button class="btn btn-outline-primary" type="submit">Enviar</button>
+        </div>
+    </EditForm>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private TicketDetailDto? _ticket;
+    private bool _notFound;
+    private bool _assigning;
+    private string? _uploadError;
+    private readonly List<ChatMessageDto> _messages = [];
+    private HubConnection? _hub;
+    private readonly CommentModel _newComment = new();
+    private readonly MessageModel _newMessage = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!AuthState.IsAuthenticated)
+        {
+            Nav.NavigateTo("/login");
+            return;
+        }
+
+        await LoadTicketAsync();
+        if (_ticket is null)
+            return;
+
+        _messages.AddRange(await Api.GetChatMessagesAsync(Id));
+        await ConnectChatAsync();
+    }
+
+    private async Task LoadTicketAsync()
+    {
+        _ticket = await Api.GetTicketDetailAsync(Id);
+        _notFound = _ticket is null;
+    }
+
+    private async Task ConnectChatAsync()
+    {
+        var hubUrl = new Uri(Api.ApiBaseAddress!, "hubs/chat");
+        _hub = new HubConnectionBuilder()
+            .WithUrl(hubUrl, options => options.AccessTokenProvider = () => Task.FromResult(AuthState.Token))
+            .WithAutomaticReconnect()
+            .Build();
+
+        _hub.On<ChatMessageDto>("ReceiveMessage", message =>
+        {
+            _messages.Add(message);
+            InvokeAsync(StateHasChanged);
+        });
+
+        await _hub.StartAsync();
+        await _hub.InvokeAsync("JoinTicketChat", Id);
+    }
+
+    private async Task HandleAssignAsync()
+    {
+        _assigning = true;
+        try
+        {
+            await Api.AssignToSelfAsync(Id);
+            await LoadTicketAsync();
+        }
+        finally
+        {
+            _assigning = false;
+        }
+    }
+
+    private async Task HandleAddCommentAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newComment.Texto))
+            return;
+
+        await Api.AddCommentAsync(Id, _newComment.Texto);
+        _newComment.Texto = string.Empty;
+        await LoadTicketAsync();
+    }
+
+    private async Task HandleUploadAsync(InputFileChangeEventArgs e)
+    {
+        _uploadError = null;
+        try
+        {
+            const long maxSize = 10 * 1024 * 1024; // 10 MB
+            await using var stream = e.File.OpenReadStream(maxSize);
+            await Api.UploadAttachmentAsync(Id, stream, e.File.Name, e.File.ContentType);
+            await LoadTicketAsync();
+        }
+        catch (Exception ex)
+        {
+            _uploadError = $"Falha ao enviar o arquivo: {ex.Message}";
+        }
+    }
+
+    private async Task HandleSendMessageAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_newMessage.Texto) || _hub is null)
+            return;
+
+        await _hub.InvokeAsync("SendMessage", Id, _newMessage.Texto);
+        _newMessage.Texto = string.Empty;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_hub is not null)
+            await _hub.DisposeAsync();
+    }
+
+    private class CommentModel
+    {
+        public string Texto { get; set; } = string.Empty;
+    }
+
+    private class MessageModel
+    {
+        public string Texto { get; set; } = string.Empty;
+    }
+}

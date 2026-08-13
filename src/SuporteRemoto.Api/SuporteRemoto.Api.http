@@ -1,0 +1,6 @@
+@SuporteRemoto.Api_HostAddress = http://localhost:5047
+
+GET {{SuporteRemoto.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
