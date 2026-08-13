@@ -102,11 +102,30 @@ dotnet run --project src/SuporteRemoto.RemoteAgent
 dotnet run --project src/SuporteRemoto.RemoteViewer
 ```
 
-Fluxo testado ponta a ponta com dois usuários (`UsuarioFinal` e `Tecnico`): registro → login (JWT)
-→ criar ticket → listagem respeita papel (`UsuarioFinal` só vê os próprios, `Tecnico`/`Admin` veem
-todos) → "Pegar ticket" atribui e avança o status → comentários e anexos (upload/download) → chat
+Fluxo testado ponta a ponta com dois usuários (`UsuarioFinal` e `Tecnico`): entrada/login → criar
+ticket → listagem respeita papel (`UsuarioFinal` só vê os próprios, `Tecnico`/`Admin` veem todos)
+→ "Pegar ticket" atribui e avança o status → comentários e anexos (upload/download) → chat
 embutido em tempo real via `ChatHub`, testado com dois clientes SignalR simultâneos (mensagem
 persistida e recebida por ambos) → acesso a ticket de outro usuário final retorna 404.
+
+## Acesso e papéis
+
+Dois jeitos de entrar, propositalmente diferentes:
+
+- **Usuário final** (`/login`, no menu) — só nome + e-mail, sem senha. Cria a conta
+  automaticamente no primeiro acesso (senha aleatória interna, nunca exposta/usada). Serve só pra
+  abrir e acompanhar os próprios chamados.
+- **Equipe** (`Tecnico`/`Admin`) — telas **fora do menu**, não linkadas em lugar nenhum:
+  `/staff/register` e `/staff/login`, com e-mail + senha de verdade. `POST /api/auth/register` e
+  `POST /api/auth/login` na Api rejeitam a role `UsuarioFinal` — só criam/autenticam conta de
+  equipe.
+
+⚠️ **Isso é intencionalmente simples pra fase de teste, não é o modelo final**: a entrada de
+usuário final não verifica de forma nenhuma que a pessoa é dona daquele e-mail (sem link de
+confirmação), e a tela de equipe só está "escondida" por não estar no menu — quem souber/adivinhar
+a URL consegue tentar criar uma conta de Admin. Antes de qualquer uso real com dados sensíveis ou
+de ir pra produto de verdade, isso precisa de verificação de e-mail (ou SSO) pro usuário final e
+alguma proteção de verdade (convite/código, ou aprovação manual) pra criação de conta de equipe.
 
 ## Decisões relevantes desta etapa
 
@@ -145,3 +164,6 @@ persistida e recebida por ambos) → acesso a ticket de outro usuário final ret
 4. Anexos de ticket ficam em disco local dentro do container — no Render isso é efêmero (some a
    cada redeploy/restart). Trocar por armazenamento externo (S3-compatível) quando o módulo de
    tickets for revisitado.
+5. Fechar as duas simplificações de segurança da seção "Acesso e papéis" acima (verificação de
+   e-mail pro usuário final, proteção de verdade na criação de conta de equipe) antes de qualquer
+   uso com dados reais.
